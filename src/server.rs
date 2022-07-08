@@ -14,8 +14,8 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 
 use crate::rfb::{
-    ClientInit, ClientMessage, FramebufferUpdate, KeyEvent, PixelFormat, ProtoVersion, ReadMessage,
-    SecurityResult, SecurityType, SecurityTypes, ServerInit, WriteMessage,
+    ClientInit, ClientMessage, FramebufferUpdate, KeyEvent, PixelFormat, ProtoVersion,
+    SecurityResult, SecurityType, SecurityTypes, ServerInit,
 };
 
 /// Immutable state

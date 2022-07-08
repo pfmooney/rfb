@@ -17,8 +17,8 @@ use crate::rfb::ClientMessage::{
     ClientCutText, FramebufferUpdateRequest, KeyEvent, PointerEvent, SetEncodings, SetPixelFormat,
 };
 use crate::rfb::{
-    ClientInit, ClientMessage, FramebufferUpdate, PixelFormat, ProtoVersion, ReadMessage,
-    SecurityResult, SecurityType, SecurityTypes, ServerInit, WriteMessage,
+    ClientInit, ClientMessage, FramebufferUpdate, PixelFormat, ProtoVersion, SecurityResult,
+    SecurityType, SecurityTypes, ServerInit,
 };
 
 /// Immutable state

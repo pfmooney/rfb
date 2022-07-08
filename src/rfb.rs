@@ -15,16 +15,6 @@ use crate::encodings::{Encoding, EncodingType};
 use crate::keysym::Keysym;
 use crate::pixel_formats::rgb_888;
 
-pub trait ReadMessage {
-    fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>>
-    where
-        Self: Sized;
-}
-
-pub trait WriteMessage {
-    fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>>;
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub enum ProtoVersion {
     Rfb33,
@@ -32,8 +22,8 @@ pub enum ProtoVersion {
     Rfb38,
 }
 
-impl ReadMessage for ProtoVersion {
-    fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
+impl ProtoVersion {
+    pub fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
         async move {
             let mut buf = [0u8; 12];
             stream.read_exact(&mut buf).await?;
@@ -47,10 +37,8 @@ impl ReadMessage for ProtoVersion {
         }
         .boxed()
     }
-}
 
-impl WriteMessage for ProtoVersion {
-    fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
+    pub fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
         async move {
             let s = match self {
                 ProtoVersion::Rfb33 => b"RFB 003.003\n",
@@ -74,8 +62,8 @@ pub enum SecurityType {
     VncAuthentication,
 }
 
-impl WriteMessage for SecurityTypes {
-    fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
+impl SecurityTypes {
+    pub fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
         async move {
             // TODO: fix cast
             stream.write_u8(self.0.len() as u8).await?;
@@ -89,8 +77,8 @@ impl WriteMessage for SecurityTypes {
     }
 }
 
-impl ReadMessage for SecurityType {
-    fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
+impl SecurityType {
+    pub fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
         async move {
             let t = stream.read_u8().await?;
             match t {
@@ -101,10 +89,7 @@ impl ReadMessage for SecurityType {
         }
         .boxed()
     }
-}
-
-impl WriteMessage for SecurityType {
-    fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
+    pub fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
         async move {
             let val = match self {
                 SecurityType::None => 0,
@@ -124,8 +109,8 @@ pub enum SecurityResult {
     Failure(String),
 }
 
-impl WriteMessage for SecurityResult {
-    fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
+impl SecurityResult {
+    pub fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
         async move {
             match self {
                 SecurityResult::Success => {
@@ -149,8 +134,8 @@ pub struct ClientInit {
     pub shared: bool,
 }
 
-impl ReadMessage for ClientInit {
-    fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
+impl ClientInit {
+    pub fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
         async {
             let flag = stream.read_u8().await?;
             match flag {
@@ -178,10 +163,7 @@ impl ServerInit {
             name,
         }
     }
-}
-
-impl WriteMessage for ServerInit {
-    fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
+    pub fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
         async move {
             self.initial_res.write_to(stream).await?;
             self.pixel_format.write_to(stream).await?;
@@ -229,8 +211,8 @@ pub(crate) struct Position {
     y: u16,
 }
 
-impl ReadMessage for Position {
-    fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
+impl Position {
+    pub fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
         async {
             let x = stream.read_u16().await?;
             let y = stream.read_u16().await?;
@@ -247,8 +229,8 @@ pub(crate) struct Resolution {
     height: u16,
 }
 
-impl ReadMessage for Resolution {
-    fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
+impl Resolution {
+    pub fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
         async {
             let width = stream.read_u16().await?;
             let height = stream.read_u16().await?;
@@ -257,10 +239,7 @@ impl ReadMessage for Resolution {
         }
         .boxed()
     }
-}
-
-impl WriteMessage for Resolution {
-    fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
+    pub fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
         async move {
             stream.write_u16(self.width).await?;
             stream.write_u16(self.height).await?;
@@ -294,8 +273,8 @@ impl Rectangle {
     }
 }
 
-impl WriteMessage for Rectangle {
-    fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
+impl Rectangle {
+    pub fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
         async move {
             let encoding_type: i32 = self.data.get_type().into();
 
@@ -314,8 +293,8 @@ impl WriteMessage for Rectangle {
     }
 }
 
-impl WriteMessage for FramebufferUpdate {
-    fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
+impl FramebufferUpdate {
+    pub fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
         async move {
             // TODO: type function?
             stream.write_u8(0).await?;
@@ -415,8 +394,8 @@ impl PixelFormat {
     }
 }
 
-impl ReadMessage for PixelFormat {
-    fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
+impl PixelFormat {
+    pub fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
         async {
             let bits_per_pixel = stream.read_u8().await?;
             let depth = stream.read_u8().await?;
@@ -440,10 +419,7 @@ impl ReadMessage for PixelFormat {
         }
         .boxed()
     }
-}
-
-impl WriteMessage for PixelFormat {
-    fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
+    pub fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
         async move {
             stream.write_u8(self.bits_per_pixel).await?;
             stream.write_u8(self.depth).await?;
@@ -481,8 +457,8 @@ pub struct ColorFormat {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ColorMap {}
 
-impl ReadMessage for ColorSpecification {
-    fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
+impl ColorSpecification {
+    pub fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
         async {
             let tc_flag = stream.read_u8().await?;
             match tc_flag {
@@ -513,10 +489,7 @@ impl ReadMessage for ColorSpecification {
         }
         .boxed()
     }
-}
-
-impl WriteMessage for ColorSpecification {
-    fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
+    pub fn write_to<'a>(self, stream: &'a mut TcpStream) -> BoxFuture<'a, Result<()>> {
         async move {
             match self {
                 ColorSpecification::ColorFormat(cf) => {
@@ -550,8 +523,8 @@ pub enum ClientMessage {
     ClientCutText(String),
 }
 
-impl ReadMessage for ClientMessage {
-    fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<ClientMessage>> {
+impl ClientMessage {
+    pub fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<ClientMessage>> {
         async {
             let t = stream.read_u8().await?;
             let res = match t {
@@ -676,8 +649,8 @@ pub struct PointerEvent {
     pressed: MouseButtons,
 }
 
-impl ReadMessage for PointerEvent {
-    fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
+impl PointerEvent {
+    pub fn read_from<'a>(stream: &'a mut TcpStream) -> BoxFuture<'a, Result<Self>> {
         async {
             let button_mask = stream.read_u8().await?;
             let pressed = MouseButtons::from_bits_truncate(button_mask);

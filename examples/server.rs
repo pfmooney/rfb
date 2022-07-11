@@ -4,22 +4,21 @@
 //
 // Copyright 2022 Oxide Computer Company
 
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
 use anyhow::{bail, Result};
-use async_trait::async_trait;
 use clap::{Parser, ValueEnum};
 use env_logger;
 use image::io::Reader as ImageReader;
 use image::GenericImageView;
 use log::info;
+use tokio::net::TcpListener;
+
 use rfb::encodings::RawEncoding;
 use rfb::rfb::{
     FramebufferUpdate, KeyEvent, PixelFormat, ProtoVersion, Rectangle, SecurityType, SecurityTypes,
 };
-use rfb::{
-    pixel_formats::rgb_888,
-    server::{Server, VncServer, VncServerConfig, VncServerData},
-};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use rfb::{self, pixel_formats::rgb_888};
 
 const WIDTH: usize = 1024;
 const HEIGHT: usize = 768;
@@ -60,24 +59,6 @@ struct Args {
     blue_order: u8,
 }
 
-#[derive(ValueEnum, Debug, Copy, Clone)]
-enum Image {
-    Oxide,
-    TestTubes,
-    Red,
-    Green,
-    Blue,
-    White,
-    Black,
-}
-
-#[derive(Clone)]
-struct ExampleServer {
-    display: Image,
-    rgb_order: (u8, u8, u8),
-    big_endian: bool,
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
@@ -101,26 +82,37 @@ async fn main() -> Result<()> {
         args.image, pf
     );
 
-    let config = VncServerConfig {
-        addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 9000),
-        version: ProtoVersion::Rfb38,
-        sec_types: SecurityTypes(vec![SecurityType::None, SecurityType::VncAuthentication]),
-        name: "rfb-example-server".to_string(),
-    };
-    let data = VncServerData {
-        width: WIDTH as u16,
-        height: HEIGHT as u16,
-        input_pixel_format: pf.clone(),
-    };
-    let server = ExampleServer {
+    let backend = ExampleBackend {
         display: args.image,
         rgb_order: (args.red_order, args.green_order, args.blue_order),
         big_endian: args.big_endian,
     };
-    let s = VncServer::new(server, config, data);
-    s.start().await;
 
-    Ok(())
+    let listener = TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 9000))
+        .await
+        .unwrap();
+
+    loop {
+        let (mut sock, addr) = listener.accept().await.unwrap();
+
+        info!("New connection from {:?}", addr);
+
+        let server = rfb::Server::new(WIDTH as u16, HEIGHT as u16, pf.clone());
+        server
+            .initialize(
+                &mut sock,
+                ProtoVersion::Rfb38,
+                SecurityTypes(vec![SecurityType::None, SecurityType::VncAuthentication]),
+                "rfb-example-server".to_string(),
+            )
+            .await
+            .unwrap();
+
+        let be_clone = backend.clone();
+        tokio::spawn(async move {
+            server.process(&mut sock, || example_data(&be_clone)).await;
+        });
+    }
 }
 
 fn validate_order(r: u8, g: u8, b: u8) -> Result<()> {
@@ -172,6 +164,23 @@ fn generate_color(index: u8, big_endian: bool) -> Vec<u8> {
     pixels
 }
 
+#[derive(ValueEnum, Debug, Copy, Clone)]
+enum Image {
+    Oxide,
+    TestTubes,
+    Red,
+    Green,
+    Blue,
+    White,
+    Black,
+}
+#[derive(Clone)]
+struct ExampleBackend {
+    display: Image,
+    rgb_order: (u8, u8, u8),
+    big_endian: bool,
+}
+
 fn generate_image(name: &str, big_endian: bool, rgb_order: (u8, u8, u8)) -> Vec<u8> {
     const LEN: usize = WIDTH * HEIGHT * rgb_888::BYTES_PER_PIXEL;
     let mut pixels = vec![0xffu8; LEN];
@@ -217,21 +226,8 @@ fn generate_pixels(img: Image, big_endian: bool, rgb_order: (u8, u8, u8)) -> Vec
     }
 }
 
-#[async_trait]
-impl Server for ExampleServer {
-    async fn get_framebuffer_update(&self) -> FramebufferUpdate {
-        let pixels_width = 1024;
-        let pixels_height = 768;
-        let pixels = generate_pixels(self.display, self.big_endian, self.rgb_order);
-        let r = Rectangle::new(
-            0,
-            0,
-            pixels_width,
-            pixels_height,
-            Box::new(RawEncoding::new(pixels)),
-        );
-        FramebufferUpdate::new(vec![r])
-    }
-
-    async fn key_event(&self, _ke: KeyEvent) {}
+async fn example_data(be: &ExampleBackend) -> FramebufferUpdate {
+    let pixels = generate_pixels(be.display, be.big_endian, be.rgb_order);
+    let r = Rectangle::new(0, 0, 1024, 768, Box::new(RawEncoding::new(pixels)));
+    FramebufferUpdate::new(vec![r])
 }

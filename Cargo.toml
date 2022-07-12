@@ -15,12 +15,12 @@ name = "rfb"
 path = "src/lib.rs"
 
 [[example]]
-name = "example-server"
-path = "examples/server.rs"
+name = "example-socket"
+path = "examples/socket.rs"
 
 [[example]]
-name = "example-novnc"
-path = "examples/novnc.rs"
+name = "example-websock"
+path = "examples/websock.rs"
 
 # Prevent cargo from building shared code like a binary
 [[example]]

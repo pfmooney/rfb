@@ -6,68 +6,74 @@
 
 //! Pixel Formats
 //!
-//! The pixel format data structure is specified in section 7.4 of RFC 6143. The data structure
-//! describes how large a pixel is in bits, how many bits of the pixel are used for describing
-//! color, and how colors are encoded in the pixel: either as a color specification or a color map,
-//! with a color specification being the most common.
+//! The pixel format data structure is specified in section 7.4 of RFC 6143. The
+//! data structure describes how large a pixel is in bits, how many bits of the
+//! pixel are used for describing color, and how colors are encoded in the
+//! pixel: either as a color specification or a color map, with a color
+//! specification being the most common.
 //!
-//! The color specification format describes which bits in the pixel represent each color (red,
-//! green, and blue), the max value of each color, and the endianness of the pixel. The location of
-//! each color is described by a shift, in which the shift represents how many shifts are needed to
-//! get the color value to the least significant bit (that is, how many right shifts are needed).
+//! The color specification format describes which bits in the pixel represent
+//! each color (red, green, and blue), the max value of each color, and the
+//! endianness of the pixel. The location of each color is described by a shift,
+//! in which the shift represents how many shifts are needed to get the color
+//! value to the least significant bit (that is, how many right shifts are
+//! needed).
 //!
-//! For example, consider the 32-bit pixel value 0x01020304 with a depth of 24. Let's say the pixel
-//! format has a red shift of 0, green shift of 8, blue shift of 16, all colors have a max value of
-//! 255, and the host is little-endian. This is the pixel format little-endian xBGR.
+//! For example, consider the 32-bit pixel value 0x01020304 with a depth of 24.
+//! Let's say the pixel format has a red shift of 0, green shift of 8, blue
+//! shift of 16, all colors have a max value of 255, and the host is
+//! little-endian. This is the pixel format little-endian xBGR.
 //!
 //! So to get the value of each color, we would do:
 //! - red = (0x01020304 >> 0) & 255 = 0x04
 //! - blue = (0x01020304 >> 8) & 255 = 0x03
 //! - green = (0x01020304 >> 16) & 255 = 0x02
 //!
-//! This is relatively straightforward when considering a single pixel format. But an RFB server
-//! must be able to translate between pixel formats, including translating between hosts of
-//! different endianness. Further, it is convenient to represent pixels using a vector of bytes
-//! instead of a vector of n-bit values, and transformations on pixels are done for groups of bytes
-//! representing a pixel, rather than a single pixel value. But thinking about pixels in this
-//! representation can be tricky, as the pixel format describes shifts, which operate the same on a
-//! value regardless of endianness, but code operating on a byte vector must be endian-aware.
+//! This is relatively straightforward when considering a single pixel format.
+//! But an RFB server must be able to translate between pixel formats, including
+//! translating between hosts of different endianness. Further, it is convenient
+//! to represent pixels using a vector of bytes instead of a vector of n-bit
+//! values, and transformations on pixels are done for groups of bytes
+//! representing a pixel, rather than a single pixel value. But thinking about
+//! pixels in this representation can be tricky, as the pixel format describes
+//! shifts, which operate the same on a value regardless of endianness, but code
+//! operating on a byte vector must be endian-aware.
 //!
-//! If we think about the same pixel before as a byte vector, we would have the following
-//! representation: [ 0x04, 0x03, 0x02, 0x01 ]. Note that the bytes are in reverse order from the
-//! value above because the host is little-endian, so the least-significant byte (0x04) is first.
+//! If we think about the same pixel before as a byte vector, we would have the
+//! following representation: [ 0x04, 0x03, 0x02, 0x01 ]. Note that the bytes
+//! are in reverse order from the value above because the host is little-endian,
+//! so the least-significant byte (0x04) is first.
 //!
-//! So to get the value of each color, we would index into the pixel based on the shift. A shift of
-//! 0 indicates the color is at the least significant byte (the first byte, byte 0 for
-//!   little-endian pixels), a shift of 8 is the second least significant byte (1), and so on:
-//! - red = pixel\[0\] & 255 = 0x04
-//! - green = pixel\[1\] & 255 = 0x03
-//! - blue = pixel\[2\] & 255 = 0x02
+//! So to get the value of each color, we would index into the pixel based on
+//! the shift. A shift of
+//! 0 indicates the color is at the least significant byte (the first byte, byte
+//!   0 for little-endian pixels), a shift of 8 is the second least significant
+//!   byte (1), and so on: - red = pixel\[0\] & 255 = 0x04 - green = pixel\[1\]
+//!   & 255 = 0x03 - blue = pixel\[2\] & 255 = 0x02
 //!
-//! Since the RFB server is considering pixels that might be from little-endian or big-endian hosts
-//! though, consider if the same byte vector came from an RGBx big endian pixel. In that case, the
-//! least significant byte is byte 3 and the most significant byte is byte 0. So the color values
-//! for this vector would be:
-//! - red = pixel\[3\] & 255 = 0x01
-//! - green = pixel\[2\] & 255 = 0x02
+//! Since the RFB server is considering pixels that might be from little-endian
+//! or big-endian hosts though, consider if the same byte vector came from an
+//! RGBx big endian pixel. In that case, the least significant byte is byte 3
+//! and the most significant byte is byte 0. So the color values for this vector
+//! would be: - red = pixel\[3\] & 255 = 0x01 - green = pixel\[2\] & 255 = 0x02
 //! - blue = pixel\[1\] & 255 = 0x03
 //!
 
 ///  Utility functions and constants related to fourcc codes.
 ///
-/// Fourcc is a 4-byte ASCII code representing a pixel format. For example, the value
-/// 0x34325258 is '42RX' in ASCII (34='4', 32='2', 52='R', and 58='X'). This code maps to the pixel
-/// format 32-bit little-endian xRGB.
+/// Fourcc is a 4-byte ASCII code representing a pixel format. For example, the
+/// value 0x34325258 is '42RX' in ASCII (34='4', 32='2', 52='R', and 58='X').
+/// This code maps to the pixel format 32-bit little-endian xRGB.
 ///
-/// A good reference for mapping common fourcc codes to their corresponding pixel formats is the
-/// drm_fourcc.h header file in the linux source code.
+/// A good reference for mapping common fourcc codes to their corresponding
+/// pixel formats is the drm_fourcc.h header file in the linux source code.
 pub mod fourcc {
     use super::rgb_888;
     use crate::rfb::{ColorFormat, ColorSpecification, PixelFormat};
     use anyhow::{anyhow, Result};
 
-    // XXX: it might make sense to turn fourcc values into a type (such as an enum or collection of
-    // enums)
+    // XXX: it might make sense to turn fourcc values into a type (such as an
+    // enum or collection of enums)
     pub const FOURCC_XR24: u32 = 0x34325258; // little-endian xRGB, 8:8:8:8
     pub const FOURCC_RX24: u32 = 0x34325852; // little-endian RGBx, 8:8:8:8
     pub const FOURCC_BX24: u32 = 0x34325842; // little-endian BGRx, 8:8:8:8
@@ -165,7 +171,8 @@ pub mod rgb_888 {
         shift == 0 || shift == 8 || shift == 16 || shift == 24
     }
 
-    /// Returns the byte index into a 4-byte pixel vector for a given color shift, accounting for endianness.
+    /// Returns the byte index into a 4-byte pixel vector for a given color
+    /// shift, accounting for endianness.
     pub fn color_shift_to_index(shift: u8, big_endian: bool) -> usize {
         assert!(valid_shift(shift));
 
@@ -176,16 +183,18 @@ pub mod rgb_888 {
         }
     }
 
-    /// Returns the index of the unused byte (the only byte not representing R, G, or B).
+    /// Returns the index of the unused byte
+    /// (the only byte not representing R, G, or B).
     pub fn unused_index(r: usize, g: usize, b: usize) -> usize {
         (3 + 2 + 1) - r - g - b
     }
 
-    /// Given a set of red/green/blue shifts from a pixel format and its endianness, determine
-    /// which byte index in a 4-byte vector representing a pixel maps to which color.
+    /// Given a set of red/green/blue shifts from a pixel format and its
+    /// endianness, determine which byte index in a 4-byte vector representing a
+    /// pixel maps to which color.
     ///
-    /// For example, for the shifts red=0, green=8, blue=16, and a little-endian format, the
-    /// indices would be red=0, green=1, blue=2, and x=3.
+    /// For example, for the shifts red=0, green=8, blue=16, and a little-endian
+    /// format, the indices would be red=0, green=1, blue=2, and x=3.
     pub fn rgbx_index(
         red_shift: u8,
         green_shift: u8,
@@ -200,7 +209,8 @@ pub mod rgb_888 {
         (r, g, b, x)
     }
 
-    /// Translate between RGB888 formats. The input and output format must both be RGB888.
+    /// Translate between RGB888 formats. The input and output format must both
+    /// be RGB888.
     pub fn transform(
         pixels: &Vec<u8>,
         input: &PixelFormat,
@@ -209,10 +219,7 @@ pub mod rgb_888 {
         assert!(input.is_rgb_888());
         assert!(output.is_rgb_888());
 
-        //let mut buf = Vec::with_capacity(pixels.len());
-        //buf.resize(pixels.len(), 0x0u8);
         let mut buf = vec![0; pixels.len()];
-
         let (ir, ig, ib, ix) = match &input.color_spec {
             ColorSpecification::ColorFormat(cf) => rgbx_index(
                 cf.red_shift,

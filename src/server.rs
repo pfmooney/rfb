@@ -184,12 +184,13 @@ impl Server {
                         let mut fbu = updatef().await;
                         let state = self.state.lock().await;
 
-                        // We only need to change pixel formats if the client requested a different
-                        // one than what's specified in the input.
+                        // We only need to change pixel formats if the client
+                        // requested a different one than what's specified in
+                        // the input.
                         //
-                        // For now, we only support transformations between 4-byte RGB formats, so
-                        // if the requested format isn't one of those, we'll just leave the pixels
-                        // as is.
+                        // For now, we only support transformations between
+                        // 4-byte RGB formats, so if the requested format isn't
+                        // one of those, we'll just leave the pixels as is.
                         if state.input_format != state.output_format
                             && state.input_format.is_rgb_888()
                             && state.output_format.is_rgb_888()

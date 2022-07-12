@@ -7,10 +7,8 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use anyhow::{bail, Result};
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use env_logger;
-use image::io::Reader as ImageReader;
-use image::GenericImageView;
 use log::info;
 use tokio::net::TcpListener;
 
@@ -19,6 +17,9 @@ use rfb::rfb::{
     FramebufferUpdate, KeyEvent, PixelFormat, ProtoVersion, Rectangle, SecurityType, SecurityTypes,
 };
 use rfb::{self, pixel_formats::rgb_888};
+
+mod shared;
+use shared::{order_to_shift, ExampleBackend, Image};
 
 const WIDTH: usize = 1024;
 const HEIGHT: usize = 768;
@@ -110,7 +111,9 @@ async fn main() -> Result<()> {
 
         let be_clone = backend.clone();
         tokio::spawn(async move {
-            server.process(&mut sock, || example_data(&be_clone)).await;
+            server
+                .process(&mut sock, || be_clone.generate(WIDTH, HEIGHT))
+                .await;
         });
     }
 }
@@ -125,109 +128,4 @@ fn validate_order(r: u8, g: u8, b: u8) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn order_to_shift(order: u8) -> u8 {
-    assert!(order <= 3);
-    (3 - order) * rgb_888::BITS_PER_COLOR
-}
-
-fn order_to_index(order: u8, big_endian: bool) -> u8 {
-    assert!(order <= 3);
-
-    if big_endian {
-        order
-    } else {
-        4 - order - 1
-    }
-}
-
-fn generate_color(index: u8, big_endian: bool) -> Vec<u8> {
-    const LEN: usize = WIDTH * HEIGHT * rgb_888::BYTES_PER_PIXEL;
-    let mut pixels = vec![0x0u8; LEN];
-
-    let idx = order_to_index(index, big_endian);
-
-    let mut x = 0;
-    for i in 0..pixels.len() {
-        if x == idx {
-            pixels[i] = 0xff;
-        }
-
-        if x == 3 {
-            x = 0;
-        } else {
-            x += 1;
-        }
-    }
-
-    pixels
-}
-
-#[derive(ValueEnum, Debug, Copy, Clone)]
-enum Image {
-    Oxide,
-    TestTubes,
-    Red,
-    Green,
-    Blue,
-    White,
-    Black,
-}
-#[derive(Clone)]
-struct ExampleBackend {
-    display: Image,
-    rgb_order: (u8, u8, u8),
-    big_endian: bool,
-}
-
-fn generate_image(name: &str, big_endian: bool, rgb_order: (u8, u8, u8)) -> Vec<u8> {
-    const LEN: usize = WIDTH * HEIGHT * rgb_888::BYTES_PER_PIXEL;
-    let mut pixels = vec![0xffu8; LEN];
-
-    let img = ImageReader::open(name).unwrap().decode().unwrap();
-
-    let (r, g, b) = rgb_order;
-    let r_idx = order_to_index(r, big_endian) as usize;
-    let g_idx = order_to_index(g, big_endian) as usize;
-    let b_idx = order_to_index(b, big_endian) as usize;
-    let x_idx = rgb_888::unused_index(r_idx, g_idx, b_idx);
-
-    // Convert the input image pixels to the requested pixel format.
-    for (x, y, pixel) in img.pixels() {
-        let ux = x as usize;
-        let uy = y as usize;
-
-        let y_offset = WIDTH * rgb_888::BYTES_PER_PIXEL;
-        let x_offset = ux * rgb_888::BYTES_PER_PIXEL;
-
-        pixels[uy * y_offset + x_offset + r_idx] = pixel[0];
-        pixels[uy * y_offset + x_offset + g_idx] = pixel[1];
-        pixels[uy * y_offset + x_offset + b_idx] = pixel[2];
-        pixels[uy * y_offset + x_offset + x_idx] = pixel[3];
-    }
-
-    pixels
-}
-
-fn generate_pixels(img: Image, big_endian: bool, rgb_order: (u8, u8, u8)) -> Vec<u8> {
-    const LEN: usize = WIDTH * HEIGHT * rgb_888::BYTES_PER_PIXEL;
-
-    let (r, g, b) = rgb_order;
-
-    match img {
-        Image::Oxide => generate_image("example-images/oxide.jpg", big_endian, rgb_order),
-        Image::TestTubes => generate_image("example-images/test-tubes.jpg", big_endian, rgb_order),
-        Image::Red => generate_color(r, big_endian),
-        Image::Green => generate_color(g, big_endian),
-        Image::Blue => generate_color(b, big_endian),
-        Image::White => vec![0xffu8; LEN],
-        Image::Black => vec![0x0u8; LEN],
-    }
-}
-
-async fn example_data(be: &ExampleBackend) -> FramebufferUpdate {
-    let pixels = generate_pixels(be.display, be.big_endian, be.rgb_order);
-    let r = Rectangle::new(0, 0, 1024, 768, Box::new(RawEncoding::new(pixels)));
-    FramebufferUpdate::new(vec![r])
 }

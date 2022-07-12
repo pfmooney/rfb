@@ -7,7 +7,7 @@
 use std::future::Future;
 
 use anyhow::{bail, Result};
-use log::{debug, error, info, trace};
+use slog::{debug, error, info, Logger};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::Mutex;
 
@@ -63,6 +63,7 @@ impl Server {
     pub async fn initialize(
         &self,
         s: &mut (impl AsyncRead + AsyncWrite + Unpin),
+        log: &Logger,
         version: ProtoVersion,
         sec_types: SecurityTypes,
         name: String,
@@ -72,48 +73,49 @@ impl Server {
             "at least one security type must be defined"
         );
 
-        self.rfb_handshake(s, version, sec_types).await?;
-        self.rfb_initialization(s, name).await
+        self.rfb_handshake(s, log, version, sec_types).await?;
+        self.rfb_initialization(s, log, name).await
     }
 
     async fn rfb_handshake(
         &self,
         s: &mut (impl AsyncRead + AsyncWrite + Unpin),
+        log: &Logger,
         version: ProtoVersion,
         sec_types: SecurityTypes,
     ) -> Result<()> {
         // ProtocolVersion handshake
-        info!("Tx: ProtoVersion={:?}", version);
+        info!(log, "Tx: ProtoVersion={:?}", version);
         version.write_to(s).await?;
         let client_version = ProtoVersion::read_from(s).await?;
-        info!("Rx: ClientVersion={:?}", client_version);
+        info!(log, "Rx: ClientVersion={:?}", client_version);
 
         if client_version < version {
             let err_str = format!(
                 "unsupported client version={:?} (server version: {:?})",
                 client_version, version
             );
-            error!("{}", err_str);
+            error!(log, "{}", err_str);
             bail!(err_str);
         }
 
         // Security Handshake
         let supported_types = sec_types.clone();
-        info!("Tx: SecurityTypes={:?}", supported_types);
+        info!(log, "Tx: SecurityTypes={:?}", supported_types);
         supported_types.write_to(s).await?;
         let client_choice = SecurityType::read_from(s).await?;
-        info!("Rx: SecurityType Choice={:?}", client_choice);
+        info!(log, "Rx: SecurityType Choice={:?}", client_choice);
         if !sec_types.0.contains(&client_choice) {
-            info!("Tx: SecurityResult=Failure");
+            info!(log, "Tx: SecurityResult=Failure");
             let failure = SecurityResult::Failure("unsupported security type".to_string());
             failure.write_to(s).await?;
             let err_str = format!("invalid security choice={:?}", client_choice);
-            error!("{}", err_str);
+            error!(log, "{}", err_str);
             bail!(err_str);
         }
 
         let res = SecurityResult::Success;
-        info!("Tx: SecurityResult=Success");
+        info!(log, "Tx: SecurityResult=Success");
         res.write_to(s).await?;
 
         Ok(())
@@ -122,10 +124,11 @@ impl Server {
     async fn rfb_initialization(
         &self,
         s: &mut (impl AsyncRead + AsyncWrite + Unpin),
+        log: &Logger,
         name: String,
     ) -> Result<()> {
         let client_init = ClientInit::read_from(s).await?;
-        info!("Rx: ClientInit={:?}", client_init);
+        info!(log, "Rx: ClientInit={:?}", client_init);
         // TODO: decide what to do in exclusive case
         match client_init.shared {
             true => {}
@@ -134,14 +137,18 @@ impl Server {
 
         let data = self.state.lock().await;
         let server_init = ServerInit::new(data.width, data.height, name, data.input_format.clone());
-        info!("Tx: ServerInit={:#?}", server_init);
+        info!(log, "Tx: ServerInit={:#?}", server_init);
         server_init.write_to(s).await?;
 
         Ok(())
     }
 
-    pub async fn process<F, R>(&self, s: &mut (impl AsyncRead + AsyncWrite + Unpin), updatef: F)
-    where
+    pub async fn process<F, R>(
+        &self,
+        s: &mut (impl AsyncRead + AsyncWrite + Unpin),
+        log: &Logger,
+        updatef: F,
+    ) where
         F: Fn() -> R,
         R: Future<Output = FramebufferUpdate>,
     {
@@ -151,7 +158,7 @@ impl Server {
             match req {
                 Ok(client_msg) => match client_msg {
                     SetPixelFormat(pf) => {
-                        debug!("Rx: SetPixelFormat={:#?}", pf);
+                        debug!(log, "Rx: SetPixelFormat={:#?}", pf);
 
                         // TODO: invalid pixel formats?
                         let mut state = self.state.lock().await;
@@ -159,10 +166,10 @@ impl Server {
                         drop(state);
                     }
                     SetEncodings(e) => {
-                        debug!("Rx: SetEncodings={:?}", e);
+                        debug!(log, "Rx: SetEncodings={:?}", e);
                     }
                     FramebufferUpdateRequest(f) => {
-                        debug!("Rx: FramebufferUpdateRequest={:?}", f);
+                        debug!(log, "Rx: FramebufferUpdateRequest={:?}", f);
 
                         //let mut fbu = self.server.get_framebuffer_update().await;
                         let mut fbu = updatef().await;
@@ -179,14 +186,17 @@ impl Server {
                             && state.output_format.is_rgb_888()
                         {
                             debug!(
+                                log,
                                 "transforming: input={:#?}, output={:#?}",
-                                state.input_format, state.output_format
+                                state.input_format,
+                                state.output_format
                             );
                             fbu = fbu.transform(&state.input_format, &state.output_format);
                         } else if !(state.input_format.is_rgb_888()
                             && state.output_format.is_rgb_888())
                         {
                             debug!(
+                                log,
                                 concat!(
                                     "cannot transform between pixel formats (not rgb888):",
                                     " input.is_rgb_888()={}, output.is_rgb_888()={}"
@@ -197,23 +207,23 @@ impl Server {
                         }
 
                         if let Err(e) = fbu.write_to(s).await {
-                            error!("could not write FramebufferUpdateRequest: {:?}", e);
+                            error!(log, "could not write FramebufferUpdateRequest: {:?}", e);
                             return;
                         }
-                        debug!("Tx: FramebufferUpdate",);
+                        debug!(log, "Tx: FramebufferUpdate",);
                     }
                     KeyEvent(ke) => {
-                        trace!("Rx: KeyEvent={:?}", ke);
+                        debug!(log, "Rx: KeyEvent={:?}", ke);
                     }
                     PointerEvent(pe) => {
-                        trace!("Rx: PointerEvent={:?}", pe);
+                        debug!(log, "Rx: PointerEvent={:?}", pe);
                     }
                     ClientCutText(t) => {
-                        trace!("Rx: ClientCutText={:?}", t);
+                        debug!(log, "Rx: ClientCutText={:?}", t);
                     }
                 },
                 Err(e) => {
-                    error!("error reading client message: {}", e);
+                    error!(log, "error reading client message: {}", e);
                     return;
                 }
             }

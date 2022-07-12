@@ -7,11 +7,13 @@
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use std::io;
-use std::sync::Arc;
+use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use clap::Parser;
 use futures_util::{Sink, Stream};
+use slog::{info, Drain};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use warp::filters::ws::{Message, WebSocket};
 use warp::{self, Filter};
@@ -112,8 +114,27 @@ impl AsyncRead for WsWrap {
     }
 }
 
+struct App {
+    be: ExampleBackend,
+    pf: PixelFormat,
+    log: slog::Logger,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    let log = slog::Logger::root(
+        Mutex::new(
+            slog_envlogger::EnvLogger::new(
+                slog_term::FullFormat::new(slog_term::TermDecorator::new().build())
+                    .build()
+                    .fuse(),
+            )
+            .fuse(),
+        )
+        .fuse(),
+        slog::o!(),
+    );
+
     let args = Args::parse();
 
     let pf = PixelFormat::new_colorformat(
@@ -127,42 +148,61 @@ async fn main() -> Result<()> {
         order_to_shift(2),
         rgb_888::MAX_VALUE,
     );
-
     let backend = ExampleBackend {
         display: args.image,
         rgb_order: (0, 1, 2),
         big_endian: false,
     };
+    let app = Arc::new(App {
+        be: backend,
+        pf,
+        log,
+    });
 
-    let state = Arc::new((backend, pf));
-    let state_add = warp::any().map(move || state.clone());
+    let app_clone = app.clone();
+    let app_ctx = warp::any().map(move || app_clone.clone());
 
-    let routes = warp::path("websockify").and(warp::ws()).and(state_add).map(
-        |ws: warp::ws::Ws, state: Arc<(ExampleBackend, PixelFormat)>| {
-            ws.on_upgrade(move |websocket| async move {
-                let mut wrapped = WsWrap::new(websocket);
+    let routes = warp::path("websockify")
+        .and(warp::addr::remote())
+        .and(warp::ws())
+        .and(app_ctx)
+        .map(
+            |addr: Option<SocketAddr>, ws: warp::ws::Ws, app: Arc<App>| {
+                let addr = addr.unwrap();
+                info!(app.log, "New connection from {}", addr);
 
-                let be_clone = state.0.clone();
-                let pf_clone = state.1.clone();
+                let child_log = app.log.new(slog::o!("sock" => addr));
+                let be_clone = app.be.clone();
+                let pf_clone = app.pf.clone();
 
-                let server = rfb::Server::new(WIDTH as u16, HEIGHT as u16, pf_clone);
-                server
-                    .initialize(
-                        &mut wrapped,
-                        ProtoVersion::Rfb38,
-                        SecurityTypes(vec![SecurityType::None, SecurityType::VncAuthentication]),
-                        "rfb-example-server".to_string(),
-                    )
-                    .await
-                    .unwrap();
+                ws.on_upgrade(move |websocket| async move {
+                    let mut wrapped = WsWrap::new(websocket);
 
-                server
-                    .process(&mut wrapped, || be_clone.generate(WIDTH, HEIGHT))
-                    .await
-            })
-        },
-    );
+                    let server = rfb::Server::new(WIDTH as u16, HEIGHT as u16, pf_clone);
+                    server
+                        .initialize(
+                            &mut wrapped,
+                            &child_log,
+                            ProtoVersion::Rfb38,
+                            SecurityTypes(vec![
+                                SecurityType::None,
+                                SecurityType::VncAuthentication,
+                            ]),
+                            "rfb-example-server".to_string(),
+                        )
+                        .await
+                        .unwrap();
 
+                    server
+                        .process(&mut wrapped, &child_log, || {
+                            be_clone.generate(WIDTH, HEIGHT)
+                        })
+                        .await
+                })
+            },
+        );
+
+    info!(app.log, "Starting server");
     warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
 
     Ok(())

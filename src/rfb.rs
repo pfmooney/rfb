@@ -20,7 +20,9 @@ pub enum ProtoVersion {
 }
 
 impl ProtoVersion {
-    pub async fn read_from(stream: &mut (impl AsyncRead + Unpin)) -> Result<Self> {
+    pub async fn read_from(
+        stream: &mut (impl AsyncRead + Unpin),
+    ) -> Result<Self> {
         let mut buf = [0u8; 12];
         stream.read_exact(&mut buf).await?;
 
@@ -32,7 +34,10 @@ impl ProtoVersion {
         }
     }
 
-    pub async fn write_to(self, stream: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    pub async fn write_to(
+        self,
+        stream: &mut (impl AsyncWrite + Unpin),
+    ) -> Result<()> {
         let s = match self {
             ProtoVersion::Rfb33 => b"RFB 003.003\n",
             ProtoVersion::Rfb37 => b"RFB 003.007\n",
@@ -54,7 +59,10 @@ pub enum SecurityType {
 }
 
 impl SecurityTypes {
-    pub async fn write_to(self, stream: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    pub async fn write_to(
+        self,
+        stream: &mut (impl AsyncWrite + Unpin),
+    ) -> Result<()> {
         // TODO: fix cast
         stream.write_u8(self.0.len() as u8).await?;
         for t in self.0.into_iter() {
@@ -66,7 +74,9 @@ impl SecurityTypes {
 }
 
 impl SecurityType {
-    pub async fn read_from(stream: &mut (impl AsyncRead + Unpin)) -> Result<Self> {
+    pub async fn read_from(
+        stream: &mut (impl AsyncRead + Unpin),
+    ) -> Result<Self> {
         let t = stream.read_u8().await?;
         match t {
             1 => Ok(SecurityType::None),
@@ -74,7 +84,10 @@ impl SecurityType {
             v => Err(anyhow!(format!("invalid security type={}", v))),
         }
     }
-    pub async fn write_to(self, stream: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    pub async fn write_to(
+        self,
+        stream: &mut (impl AsyncWrite + Unpin),
+    ) -> Result<()> {
         let val = match self {
             SecurityType::None => 0,
             SecurityType::VncAuthentication => 1,
@@ -92,7 +105,10 @@ pub enum SecurityResult {
 }
 
 impl SecurityResult {
-    pub async fn write_to(self, stream: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    pub async fn write_to(
+        self,
+        stream: &mut (impl AsyncWrite + Unpin),
+    ) -> Result<()> {
         match self {
             SecurityResult::Success => {
                 stream.write_u32(0).await?;
@@ -114,7 +130,9 @@ pub struct ClientInit {
 }
 
 impl ClientInit {
-    pub async fn read_from(stream: &mut (impl AsyncRead + Unpin)) -> Result<Self> {
+    pub async fn read_from(
+        stream: &mut (impl AsyncRead + Unpin),
+    ) -> Result<Self> {
         let flag = stream.read_u8().await?;
         match flag {
             0 => Ok(ClientInit { shared: false }),
@@ -132,14 +150,18 @@ pub struct ServerInit {
 }
 
 impl ServerInit {
-    pub fn new(width: u16, height: u16, name: String, pixel_format: PixelFormat) -> Self {
-        Self {
-            initial_res: Resolution { width, height },
-            pixel_format,
-            name,
-        }
+    pub fn new(
+        width: u16,
+        height: u16,
+        name: String,
+        pixel_format: PixelFormat,
+    ) -> Self {
+        Self { initial_res: Resolution { width, height }, pixel_format, name }
     }
-    pub async fn write_to(self, stream: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    pub async fn write_to(
+        self,
+        stream: &mut (impl AsyncWrite + Unpin),
+    ) -> Result<()> {
         self.initial_res.write_to(stream).await?;
         self.pixel_format.write_to(stream).await?;
 
@@ -167,7 +189,11 @@ impl FramebufferUpdate {
         FramebufferUpdate { rectangles }
     }
 
-    pub fn transform(&self, input_pf: &PixelFormat, output_pf: &PixelFormat) -> Self {
+    pub fn transform(
+        &self,
+        input_pf: &PixelFormat,
+        output_pf: &PixelFormat,
+    ) -> Self {
         let mut rectangles = Vec::new();
 
         for r in self.rectangles.iter() {
@@ -185,7 +211,9 @@ pub(crate) struct Position {
 }
 
 impl Position {
-    pub async fn read_from(stream: &mut (impl AsyncRead + Unpin)) -> Result<Self> {
+    pub async fn read_from(
+        stream: &mut (impl AsyncRead + Unpin),
+    ) -> Result<Self> {
         let x = stream.read_u16().await?;
         let y = stream.read_u16().await?;
 
@@ -200,13 +228,18 @@ pub(crate) struct Resolution {
 }
 
 impl Resolution {
-    pub async fn read_from(stream: &mut (impl AsyncRead + Unpin)) -> Result<Self> {
+    pub async fn read_from(
+        stream: &mut (impl AsyncRead + Unpin),
+    ) -> Result<Self> {
         let width = stream.read_u16().await?;
         let height = stream.read_u16().await?;
 
         Ok(Resolution { width, height })
     }
-    pub async fn write_to(self, stream: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    pub async fn write_to(
+        self,
+        stream: &mut (impl AsyncWrite + Unpin),
+    ) -> Result<()> {
         stream.write_u16(self.width).await?;
         stream.write_u16(self.height).await?;
         Ok(())
@@ -220,7 +253,13 @@ pub struct Rectangle {
 }
 
 impl Rectangle {
-    pub fn new(x: u16, y: u16, width: u16, height: u16, data: Box<dyn Encoding>) -> Self {
+    pub fn new(
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+        data: Box<dyn Encoding>,
+    ) -> Self {
         Rectangle {
             position: Position { x, y },
             dimensions: Resolution { width, height },
@@ -228,7 +267,11 @@ impl Rectangle {
         }
     }
 
-    pub fn transform(&self, input_pf: &PixelFormat, output_pf: &PixelFormat) -> Self {
+    pub fn transform(
+        &self,
+        input_pf: &PixelFormat,
+        output_pf: &PixelFormat,
+    ) -> Self {
         Rectangle {
             position: self.position,
             dimensions: self.dimensions,
@@ -238,7 +281,10 @@ impl Rectangle {
 }
 
 impl Rectangle {
-    pub async fn write_to(self, stream: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    pub async fn write_to(
+        self,
+        stream: &mut (impl AsyncWrite + Unpin),
+    ) -> Result<()> {
         let encoding_type: i32 = self.data.get_type().into();
 
         stream.write_u16(self.position.x).await?;
@@ -255,7 +301,10 @@ impl Rectangle {
 }
 
 impl FramebufferUpdate {
-    pub async fn write_to<'a>(self, stream: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    pub async fn write_to<'a>(
+        self,
+        stream: &mut (impl AsyncWrite + Unpin),
+    ) -> Result<()> {
         // TODO: type function?
         stream.write_u8(0).await?;
 
@@ -334,7 +383,9 @@ impl PixelFormat {
 
     /// Returns true if the pixel format is RGB888 (8-bits per color and 32 bits per pixel).
     pub fn is_rgb_888(&self) -> bool {
-        if self.bits_per_pixel != rgb_888::BITS_PER_PIXEL || self.depth != rgb_888::DEPTH {
+        if self.bits_per_pixel != rgb_888::BITS_PER_PIXEL
+            || self.depth != rgb_888::DEPTH
+        {
             return false;
         }
 
@@ -353,7 +404,9 @@ impl PixelFormat {
 }
 
 impl PixelFormat {
-    pub async fn read_from(stream: &mut (impl AsyncRead + Unpin)) -> Result<Self> {
+    pub async fn read_from(
+        stream: &mut (impl AsyncRead + Unpin),
+    ) -> Result<Self> {
         let bits_per_pixel = stream.read_u8().await?;
         let depth = stream.read_u8().await?;
         let be_flag = stream.read_u8().await?;
@@ -367,14 +420,12 @@ impl PixelFormat {
         let mut buf = [0u8; 3];
         stream.read_exact(&mut buf).await?;
 
-        Ok(Self {
-            bits_per_pixel,
-            depth,
-            big_endian,
-            color_spec,
-        })
+        Ok(Self { bits_per_pixel, depth, big_endian, color_spec })
     }
-    pub async fn write_to(self, stream: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    pub async fn write_to(
+        self,
+        stream: &mut (impl AsyncWrite + Unpin),
+    ) -> Result<()> {
         stream.write_u8(self.bits_per_pixel).await?;
         stream.write_u8(self.depth).await?;
         stream.write_u8(if self.big_endian { 1 } else { 0 }).await?;
@@ -410,7 +461,9 @@ pub struct ColorFormat {
 pub struct ColorMap {}
 
 impl ColorSpecification {
-    pub async fn read_from(stream: &mut (impl AsyncRead + Unpin)) -> Result<Self> {
+    pub async fn read_from(
+        stream: &mut (impl AsyncRead + Unpin),
+    ) -> Result<Self> {
         let tc_flag = stream.read_u8().await?;
         match tc_flag {
             0 => {
@@ -438,7 +491,10 @@ impl ColorSpecification {
             }
         }
     }
-    pub async fn write_to(self, stream: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+    pub async fn write_to(
+        self,
+        stream: &mut (impl AsyncWrite + Unpin),
+    ) -> Result<()> {
         match self {
             ColorSpecification::ColorFormat(cf) => {
                 stream.write_u8(1).await?; // true color
@@ -470,7 +526,9 @@ pub enum ClientMessage {
 }
 
 impl ClientMessage {
-    pub async fn read_from(stream: &mut (impl AsyncRead + Unpin)) -> Result<ClientMessage> {
+    pub async fn read_from(
+        stream: &mut (impl AsyncRead + Unpin),
+    ) -> Result<ClientMessage> {
         let t = stream.read_u8().await?;
         let res = match t {
             0 => {
@@ -490,7 +548,8 @@ impl ClientMessage {
 
                 let mut encodings = Vec::new();
                 for _ in 0..num_encodings {
-                    let e: EncodingType = EncodingType::try_from(stream.read_i32().await?)?;
+                    let e: EncodingType =
+                        EncodingType::try_from(stream.read_i32().await?)?;
                     encodings.push(e);
                 }
 
@@ -556,7 +615,10 @@ impl ClientMessage {
 
                 Ok(ClientMessage::ClientCutText(text))
             }
-            unknown => Err(anyhow!(format!("unknown client message type: {}", unknown))),
+            unknown => Err(anyhow!(format!(
+                "unknown client message type: {}",
+                unknown
+            ))),
         };
 
         res
@@ -612,7 +674,9 @@ pub struct PointerEvent {
 }
 
 impl PointerEvent {
-    pub async fn read_from(stream: &mut (impl AsyncRead + Unpin)) -> Result<Self> {
+    pub async fn read_from(
+        stream: &mut (impl AsyncRead + Unpin),
+    ) -> Result<Self> {
         let button_mask = stream.read_u8().await?;
         let pressed = MouseButtons::from_bits_truncate(button_mask);
         let position = Position::read_from(stream).await?;

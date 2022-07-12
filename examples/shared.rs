@@ -31,9 +31,18 @@ pub struct ExampleBackend {
     pub big_endian: bool,
 }
 impl ExampleBackend {
-    pub async fn generate(&self, width: usize, height: usize) -> FramebufferUpdate {
+    pub async fn generate(
+        &self,
+        width: usize,
+        height: usize,
+    ) -> FramebufferUpdate {
         let size = Size { width, height };
-        let pixels = generate_pixels(size, self.display, self.big_endian, self.rgb_order);
+        let pixels = generate_pixels(
+            size,
+            self.display,
+            self.big_endian,
+            self.rgb_order,
+        );
         let r = Rectangle::new(
             0,
             0,
@@ -56,7 +65,12 @@ impl Size {
     }
 }
 
-fn generate_image(size: Size, name: &str, big_endian: bool, rgb_order: (u8, u8, u8)) -> Vec<u8> {
+fn generate_image(
+    size: Size,
+    name: &str,
+    big_endian: bool,
+    rgb_order: (u8, u8, u8),
+) -> Vec<u8> {
     let mut pixels = vec![0xffu8; size.len(rgb_888::BYTES_PER_PIXEL)];
 
     let img = ImageReader::open(name).unwrap().decode().unwrap();
@@ -84,13 +98,26 @@ fn generate_image(size: Size, name: &str, big_endian: bool, rgb_order: (u8, u8, 
     pixels
 }
 
-fn generate_pixels(size: Size, img: Image, big_endian: bool, rgb_order: (u8, u8, u8)) -> Vec<u8> {
+fn generate_pixels(
+    size: Size,
+    img: Image,
+    big_endian: bool,
+    rgb_order: (u8, u8, u8),
+) -> Vec<u8> {
     let (r, g, b) = rgb_order;
     match img {
-        Image::Oxide => generate_image(size, "example-images/oxide.jpg", big_endian, rgb_order),
-        Image::TestTubes => {
-            generate_image(size, "example-images/test-tubes.jpg", big_endian, rgb_order)
-        }
+        Image::Oxide => generate_image(
+            size,
+            "example-images/oxide.jpg",
+            big_endian,
+            rgb_order,
+        ),
+        Image::TestTubes => generate_image(
+            size,
+            "example-images/test-tubes.jpg",
+            big_endian,
+            rgb_order,
+        ),
         Image::Red => generate_color(size, r, big_endian),
         Image::Green => generate_color(size, g, big_endian),
         Image::Blue => generate_color(size, b, big_endian),

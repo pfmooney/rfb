@@ -65,9 +65,11 @@ async fn main() -> Result<()> {
     let log = slog::Logger::root(
         Mutex::new(
             slog_envlogger::EnvLogger::new(
-                slog_term::FullFormat::new(slog_term::TermDecorator::new().build())
-                    .build()
-                    .fuse(),
+                slog_term::FullFormat::new(
+                    slog_term::TermDecorator::new().build(),
+                )
+                .build()
+                .fuse(),
             )
             .fuse(),
         )
@@ -100,9 +102,12 @@ async fn main() -> Result<()> {
         big_endian: args.big_endian,
     };
 
-    let listener = TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 9000))
-        .await
-        .unwrap();
+    let listener = TcpListener::bind(SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+        9000,
+    ))
+    .await
+    .unwrap();
 
     loop {
         let (mut sock, addr) = listener.accept().await.unwrap();
@@ -115,7 +120,10 @@ async fn main() -> Result<()> {
                 &mut sock,
                 &log,
                 ProtoVersion::Rfb38,
-                SecurityTypes(vec![SecurityType::None, SecurityType::VncAuthentication]),
+                SecurityTypes(vec![
+                    SecurityType::None,
+                    SecurityType::VncAuthentication,
+                ]),
                 "rfb-example-server".to_string(),
             )
             .await
@@ -125,7 +133,9 @@ async fn main() -> Result<()> {
         let log_child = log.new(slog::o!("sock" => addr));
         tokio::spawn(async move {
             server
-                .process(&mut sock, &log_child, || be_clone.generate(WIDTH, HEIGHT))
+                .process(&mut sock, &log_child, || {
+                    be_clone.generate(WIDTH, HEIGHT)
+                })
                 .await;
         });
     }

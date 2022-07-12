@@ -197,7 +197,11 @@ pub mod rgb_888 {
     }
 
     /// Translate between RGB888 formats. The input and output format must both be RGB888.
-    pub fn transform(pixels: &Vec<u8>, input: &PixelFormat, output: &PixelFormat) -> Vec<u8> {
+    pub fn transform(
+        pixels: &Vec<u8>,
+        input: &PixelFormat,
+        output: &PixelFormat,
+    ) -> Vec<u8> {
         assert!(input.is_rgb_888());
         assert!(output.is_rgb_888());
 
@@ -292,16 +296,20 @@ mod tests {
         let pixels = vec![0u8, 1u8, 2u8, 3u8];
 
         // little-endian xRGB
-        let xrgb_le = fourcc::fourcc_to_pixel_format(fourcc::FOURCC_XR24).unwrap();
+        let xrgb_le =
+            fourcc::fourcc_to_pixel_format(fourcc::FOURCC_XR24).unwrap();
 
         // little-endian RGBx
-        let rgbx_le = fourcc::fourcc_to_pixel_format(fourcc::FOURCC_RX24).unwrap();
+        let rgbx_le =
+            fourcc::fourcc_to_pixel_format(fourcc::FOURCC_RX24).unwrap();
 
         // little-endian BGRx
-        let bgrx_le = fourcc::fourcc_to_pixel_format(fourcc::FOURCC_BX24).unwrap();
+        let bgrx_le =
+            fourcc::fourcc_to_pixel_format(fourcc::FOURCC_BX24).unwrap();
 
         // little-endian xBGR
-        let xbgr_le = fourcc::fourcc_to_pixel_format(fourcc::FOURCC_XB24).unwrap();
+        let xbgr_le =
+            fourcc::fourcc_to_pixel_format(fourcc::FOURCC_XB24).unwrap();
 
         // same pixel format
         assert_eq!(transform(&pixels, &xrgb_le, &xrgb_le), pixels);

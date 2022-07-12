@@ -37,10 +37,12 @@ where
 {
     fn get_type(&self) -> EncodingType;
 
-    /// Transform this encoding from its representation into a byte vector that can be passed to the client.
+    /// Transform this encoding from its representation into a byte vector that
+    /// can be passed to the client.
     fn encode(&self) -> &Vec<u8>;
 
-    /// Translates this encoding type from an input pixel format to an output format.
+    /// Translates this encoding type from an input pixel format to an output
+    /// format.
     fn transform(
         &self,
         input: &PixelFormat,
@@ -117,8 +119,8 @@ impl Encoding for RawEncoding {
         input: &PixelFormat,
         output: &PixelFormat,
     ) -> Box<dyn Encoding> {
-        // XXX: This assumes the pixel formats are both rgb888. The server code verifies this
-        // before calling.
+        // XXX: This assumes the pixel formats are both rgb888. The server code
+        // verifies this before calling.
         assert!(input.is_rgb_888());
         assert!(output.is_rgb_888());
 

@@ -354,7 +354,8 @@ pub struct PixelFormat {
 }
 
 impl PixelFormat {
-    /// Constructor for a PixelFormat that uses a color format to specify colors.
+    /// Constructor for a PixelFormat that uses a color format (rather than a
+    /// color map) to specify colors.
     pub fn new_colorformat(
         bbp: u8,
         depth: u8,
@@ -369,7 +370,8 @@ impl PixelFormat {
         }
     }
 
-    /// Returns true if the pixel format is RGB888 (8-bits per color and 32 bits per pixel).
+    /// Returns true if the pixel format is RGB888
+    /// (8-bits per color and 32 bits per pixel).
     pub fn is_rgb_888(&self) -> bool {
         if self.bits_per_pixel != rgb_888::BITS_PER_PIXEL
             || self.depth != rgb_888::DEPTH
@@ -597,8 +599,8 @@ impl ClientMessage {
                 let mut buf: Vec<u8> = Vec::with_capacity(len as usize);
                 stream.read_exact(&mut buf).await?;
 
-                // TODO: The encoding RFB uses is ISO 8859-1 (Latin-1), which is a subset of
-                // utf-8. Determine if this is the right approach.
+                // TODO: The encoding RFB uses is ISO 8859-1 (Latin-1), which is
+                // a subset of utf-8. Determine if this is the right approach.
                 let text = String::from_utf8(buf)?;
 
                 Ok(ClientMessage::ClientCutText(text))

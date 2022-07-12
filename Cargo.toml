@@ -18,6 +18,16 @@ path = "src/lib.rs"
 name = "example-server"
 path = "examples/server.rs"
 
+[[example]]
+name = "example-novnc"
+path = "examples/novnc.rs"
+
+# Prevent cargo from building shared code like a binary
+[[example]]
+name = "example-shared"
+path = "examples/shared.rs"
+crate-type = ["rlib"]
+
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1.53"
@@ -30,3 +40,5 @@ tokio = { version = "1", features = ["full"] }
 [dev-dependencies]
 clap = { version = "3.2.5", features = ["derive"] }
 image = "0.24.1"
+warp = { version = "0.3.2" }
+futures-util = { version = "0.3.21" }

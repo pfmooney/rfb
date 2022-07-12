@@ -108,13 +108,13 @@ fn generate_pixels(
     match img {
         Image::Oxide => generate_image(
             size,
-            "example-images/oxide.jpg",
+            "examples/images/oxide.jpg",
             big_endian,
             rgb_order,
         ),
         Image::TestTubes => generate_image(
             size,
-            "example-images/test-tubes.jpg",
+            "examples/images/test-tubes.jpg",
             big_endian,
             rgb_order,
         ),

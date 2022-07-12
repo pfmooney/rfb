@@ -18,7 +18,9 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use warp::filters::ws::{Message, WebSocket};
 use warp::{self, Filter};
 
-use rfb::rfb::{PixelFormat, ProtoVersion, SecurityType, SecurityTypes};
+use rfb::rfb::{
+    ColorFormat, PixelFormat, ProtoVersion, SecurityType, SecurityTypes,
+};
 use rfb::{self, pixel_formats::rgb_888};
 
 mod shared;
@@ -148,12 +150,14 @@ async fn main() -> Result<()> {
         rgb_888::BITS_PER_PIXEL,
         rgb_888::DEPTH,
         false,
-        order_to_shift(0),
-        rgb_888::MAX_VALUE,
-        order_to_shift(1),
-        rgb_888::MAX_VALUE,
-        order_to_shift(2),
-        rgb_888::MAX_VALUE,
+        ColorFormat {
+            red_shift: order_to_shift(0),
+            red_max: rgb_888::MAX_VALUE,
+            green_shift: order_to_shift(1),
+            green_max: rgb_888::MAX_VALUE,
+            blue_shift: order_to_shift(2),
+            blue_max: rgb_888::MAX_VALUE,
+        },
     );
     let backend = ExampleBackend {
         display: args.image,

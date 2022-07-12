@@ -14,7 +14,8 @@ use tokio::net::TcpListener;
 
 use rfb::encodings::RawEncoding;
 use rfb::rfb::{
-    FramebufferUpdate, KeyEvent, PixelFormat, ProtoVersion, Rectangle, SecurityType, SecurityTypes,
+    ColorFormat, FramebufferUpdate, KeyEvent, PixelFormat, ProtoVersion,
+    SecurityType, SecurityTypes,
 };
 use rfb::{self, pixel_formats::rgb_888};
 
@@ -84,12 +85,14 @@ async fn main() -> Result<()> {
         rgb_888::BITS_PER_PIXEL,
         rgb_888::DEPTH,
         args.big_endian,
-        order_to_shift(args.red_order),
-        rgb_888::MAX_VALUE,
-        order_to_shift(args.green_order),
-        rgb_888::MAX_VALUE,
-        order_to_shift(args.blue_order),
-        rgb_888::MAX_VALUE,
+        ColorFormat {
+            red_shift: order_to_shift(args.red_order),
+            red_max: rgb_888::MAX_VALUE,
+            green_shift: order_to_shift(args.green_order),
+            green_max: rgb_888::MAX_VALUE,
+            blue_shift: order_to_shift(args.blue_order),
+            blue_max: rgb_888::MAX_VALUE,
+        },
     );
     info!(
         log,

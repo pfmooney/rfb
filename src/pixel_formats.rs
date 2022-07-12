@@ -74,6 +74,10 @@ pub mod fourcc {
     pub const FOURCC_XB24: u32 = 0x34324258; // little-endian xBGR, 8:8:8:8
 
     pub fn fourcc_to_pixel_format(fourcc: u32) -> Result<PixelFormat> {
+        // Placate clippy on the BITS_PER_COLOR multiplications
+        #![allow(clippy::identity_op)]
+        #![allow(clippy::erasing_op)]
+
         match fourcc {
             // little-endian xRGB
             FOURCC_XR24 => Ok(PixelFormat {

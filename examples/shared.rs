@@ -130,17 +130,9 @@ fn generate_color(size: Size, index: u8, big_endian: bool) -> Vec<u8> {
     let mut pixels = vec![0x0u8; size.len(rgb_888::BYTES_PER_PIXEL)];
 
     let idx = order_to_index(index, big_endian);
-
-    let mut x = 0;
-    for i in 0..pixels.len() {
-        if x == idx {
-            pixels[i] = 0xff;
-        }
-
-        if x == 3 {
-            x = 0;
-        } else {
-            x += 1;
+    for (n, val) in pixels.iter_mut().enumerate() {
+        if n as u8 % 4 == idx {
+            *val = 0xff;
         }
     }
 

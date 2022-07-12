@@ -17,5 +17,5 @@ $ ./target/debug/examples/example-server
 Then connect to the VNC server with your favorite client (such as [noVNC](https://github.com/novnc/noVNC)) at localhost:9000.
 
 If successful, you should see an oxide image as such:
-![example display with noVNC](./example-server.png)
+![example display with noVNC](./docs/example-server.png)
 

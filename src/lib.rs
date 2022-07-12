@@ -4,6 +4,8 @@
 //
 // Copyright 2022 Oxide Computer Company
 
+#![allow(clippy::style)]
+
 pub mod encodings;
 mod keysym;
 pub mod pixel_formats;

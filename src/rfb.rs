@@ -359,25 +359,13 @@ impl PixelFormat {
         bbp: u8,
         depth: u8,
         big_endian: bool,
-        red_shift: u8,
-        red_max: u16,
-        green_shift: u8,
-        green_max: u16,
-        blue_shift: u8,
-        blue_max: u16,
+        cf: ColorFormat,
     ) -> Self {
         PixelFormat {
             bits_per_pixel: bbp,
             depth,
             big_endian,
-            color_spec: ColorSpecification::ColorFormat(ColorFormat {
-                red_max,
-                green_max,
-                blue_max,
-                red_shift,
-                green_shift,
-                blue_shift,
-            }),
+            color_spec: ColorSpecification::ColorFormat(cf),
         }
     }
 

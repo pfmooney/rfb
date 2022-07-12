@@ -5,11 +5,11 @@
 // Copyright 2022 Oxide Computer Company
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::sync::Mutex;
 
 use anyhow::{bail, Result};
 use clap::Parser;
-use env_logger;
-use log::info;
+use slog::{info, Drain};
 use tokio::net::TcpListener;
 
 use rfb::encodings::RawEncoding;
@@ -62,7 +62,18 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::init();
+    let log = slog::Logger::root(
+        Mutex::new(
+            slog_envlogger::EnvLogger::new(
+                slog_term::FullFormat::new(slog_term::TermDecorator::new().build())
+                    .build()
+                    .fuse(),
+            )
+            .fuse(),
+        )
+        .fuse(),
+        slog::o!(),
+    );
 
     let args = Args::parse();
     validate_order(args.red_order, args.green_order, args.blue_order)?;
@@ -79,8 +90,8 @@ async fn main() -> Result<()> {
         rgb_888::MAX_VALUE,
     );
     info!(
-        "Starting server: image: {:?}, pixel format; {:#?}",
-        args.image, pf
+        log,
+        "Starting server: image: {:?}, pixel format; {:#?}", args.image, pf
     );
 
     let backend = ExampleBackend {
@@ -96,12 +107,13 @@ async fn main() -> Result<()> {
     loop {
         let (mut sock, addr) = listener.accept().await.unwrap();
 
-        info!("New connection from {:?}", addr);
+        info!(log, "New connection from {:?}", addr);
 
         let server = rfb::Server::new(WIDTH as u16, HEIGHT as u16, pf.clone());
         server
             .initialize(
                 &mut sock,
+                &log,
                 ProtoVersion::Rfb38,
                 SecurityTypes(vec![SecurityType::None, SecurityType::VncAuthentication]),
                 "rfb-example-server".to_string(),
@@ -110,9 +122,10 @@ async fn main() -> Result<()> {
             .unwrap();
 
         let be_clone = backend.clone();
+        let log_child = log.new(slog::o!("sock" => addr));
         tokio::spawn(async move {
             server
-                .process(&mut sock, || be_clone.generate(WIDTH, HEIGHT))
+                .process(&mut sock, &log_child, || be_clone.generate(WIDTH, HEIGHT))
                 .await;
         });
     }

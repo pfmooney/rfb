@@ -69,7 +69,10 @@ impl AsyncWrite for WsWrap {
         }
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), io::Error>> {
         let ws = Pin::new(&mut self.ws);
         ws.poll_flush(cx).map_err(warp_to_io)
     }
@@ -96,7 +99,9 @@ impl AsyncRead for WsWrap {
                         self.buf = Some((msg, 0));
                         self.poll_read(cx, buf)
                     }
-                    Poll::Ready(Some(Err(e))) => Poll::Ready(Err(warp_to_io(e))),
+                    Poll::Ready(Some(Err(e))) => {
+                        Poll::Ready(Err(warp_to_io(e)))
+                    }
                     Poll::Ready(None) => Poll::Ready(Ok(())),
                     Poll::Pending => Poll::Pending,
                 }
@@ -125,9 +130,11 @@ async fn main() -> Result<()> {
     let log = slog::Logger::root(
         Mutex::new(
             slog_envlogger::EnvLogger::new(
-                slog_term::FullFormat::new(slog_term::TermDecorator::new().build())
-                    .build()
-                    .fuse(),
+                slog_term::FullFormat::new(
+                    slog_term::TermDecorator::new().build(),
+                )
+                .build()
+                .fuse(),
             )
             .fuse(),
         )
@@ -153,11 +160,7 @@ async fn main() -> Result<()> {
         rgb_order: (0, 1, 2),
         big_endian: false,
     };
-    let app = Arc::new(App {
-        be: backend,
-        pf,
-        log,
-    });
+    let app = Arc::new(App { be: backend, pf, log });
 
     let app_clone = app.clone();
     let app_ctx = warp::any().map(move || app_clone.clone());
@@ -166,41 +169,40 @@ async fn main() -> Result<()> {
         .and(warp::addr::remote())
         .and(warp::ws())
         .and(app_ctx)
-        .map(
-            |addr: Option<SocketAddr>, ws: warp::ws::Ws, app: Arc<App>| {
-                let addr = addr.unwrap();
-                info!(app.log, "New connection from {}", addr);
+        .map(|addr: Option<SocketAddr>, ws: warp::ws::Ws, app: Arc<App>| {
+            let addr = addr.unwrap();
+            info!(app.log, "New connection from {}", addr);
 
-                let child_log = app.log.new(slog::o!("sock" => addr));
-                let be_clone = app.be.clone();
-                let pf_clone = app.pf.clone();
+            let child_log = app.log.new(slog::o!("sock" => addr));
+            let be_clone = app.be.clone();
+            let pf_clone = app.pf.clone();
 
-                ws.on_upgrade(move |websocket| async move {
-                    let mut wrapped = WsWrap::new(websocket);
+            ws.on_upgrade(move |websocket| async move {
+                let mut wrapped = WsWrap::new(websocket);
 
-                    let server = rfb::Server::new(WIDTH as u16, HEIGHT as u16, pf_clone);
-                    server
-                        .initialize(
-                            &mut wrapped,
-                            &child_log,
-                            ProtoVersion::Rfb38,
-                            SecurityTypes(vec![
-                                SecurityType::None,
-                                SecurityType::VncAuthentication,
-                            ]),
-                            "rfb-example-server".to_string(),
-                        )
-                        .await
-                        .unwrap();
+                let server =
+                    rfb::Server::new(WIDTH as u16, HEIGHT as u16, pf_clone);
+                server
+                    .initialize(
+                        &mut wrapped,
+                        &child_log,
+                        ProtoVersion::Rfb38,
+                        SecurityTypes(vec![
+                            SecurityType::None,
+                            SecurityType::VncAuthentication,
+                        ]),
+                        "rfb-example-server".to_string(),
+                    )
+                    .await
+                    .unwrap();
 
-                    server
-                        .process(&mut wrapped, &child_log, || {
-                            be_clone.generate(WIDTH, HEIGHT)
-                        })
-                        .await
-                })
-            },
-        );
+                server
+                    .process(&mut wrapped, &child_log, || {
+                        be_clone.generate(WIDTH, HEIGHT)
+                    })
+                    .await
+            })
+        });
 
     info!(app.log, "Starting server");
     warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;

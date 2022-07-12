@@ -12,11 +12,12 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::Mutex;
 
 use crate::rfb::ClientMessage::{
-    ClientCutText, FramebufferUpdateRequest, KeyEvent, PointerEvent, SetEncodings, SetPixelFormat,
+    ClientCutText, FramebufferUpdateRequest, KeyEvent, PointerEvent,
+    SetEncodings, SetPixelFormat,
 };
 use crate::rfb::{
-    ClientInit, ClientMessage, FramebufferUpdate, PixelFormat, ProtoVersion, SecurityResult,
-    SecurityType, SecurityTypes, ServerInit,
+    ClientInit, ClientMessage, FramebufferUpdate, PixelFormat, ProtoVersion,
+    SecurityResult, SecurityType, SecurityTypes, ServerInit,
 };
 
 /// Mutable state
@@ -107,9 +108,12 @@ impl Server {
         info!(log, "Rx: SecurityType Choice={:?}", client_choice);
         if !sec_types.0.contains(&client_choice) {
             info!(log, "Tx: SecurityResult=Failure");
-            let failure = SecurityResult::Failure("unsupported security type".to_string());
+            let failure = SecurityResult::Failure(
+                "unsupported security type".to_string(),
+            );
             failure.write_to(s).await?;
-            let err_str = format!("invalid security choice={:?}", client_choice);
+            let err_str =
+                format!("invalid security choice={:?}", client_choice);
             error!(log, "{}", err_str);
             bail!(err_str);
         }
@@ -136,7 +140,12 @@ impl Server {
         }
 
         let data = self.state.lock().await;
-        let server_init = ServerInit::new(data.width, data.height, name, data.input_format.clone());
+        let server_init = ServerInit::new(
+            data.width,
+            data.height,
+            name,
+            data.input_format.clone(),
+        );
         info!(log, "Tx: ServerInit={:#?}", server_init);
         server_init.write_to(s).await?;
 
@@ -191,7 +200,10 @@ impl Server {
                                 state.input_format,
                                 state.output_format
                             );
-                            fbu = fbu.transform(&state.input_format, &state.output_format);
+                            fbu = fbu.transform(
+                                &state.input_format,
+                                &state.output_format,
+                            );
                         } else if !(state.input_format.is_rgb_888()
                             && state.output_format.is_rgb_888())
                         {

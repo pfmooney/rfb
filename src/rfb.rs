@@ -575,11 +575,7 @@ impl ClientMessage {
                 let keysym_raw = stream.read_u32().await?;
                 let keysym = KeySym::try_from(keysym_raw)?;
 
-                let key_event = KeyEvent {
-                    is_pressed,
-                    keysym,
-                    keysym_raw,
-                };
+                let key_event = KeyEvent { is_pressed, keysym, keysym_raw };
 
                 Ok(ClientMessage::KeyEvent(key_event))
             }

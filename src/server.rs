@@ -15,8 +15,8 @@ use crate::rfb::ClientMessage::{
     SetEncodings, SetPixelFormat,
 };
 use crate::rfb::{
-    ClientInit, ClientMessage, FramebufferUpdate, KeyEvent, PixelFormat,
-    ProtoVersion, SecurityResult, SecurityType, SecurityTypes, ServerInit,
+    ClientInit, ClientMessage, FramebufferUpdate, PixelFormat, ProtoVersion,
+    SecurityResult, SecurityType, SecurityTypes, ServerInit,
 };
 
 /// Mutable state

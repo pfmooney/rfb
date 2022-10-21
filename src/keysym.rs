@@ -155,7 +155,9 @@ impl TryFrom<u32> for KeySym {
                 let ac_res = v.to_ascii_char();
                 match ac_res {
                     Ok(ac) => Ok(Ascii(ac)),
-                    Err(e) => Err(anyhow!("invalid keysym=0x{:x} ({:?})", value, e)),
+                    Err(e) => {
+                        Err(anyhow!("invalid keysym=0x{:x} ({:?})", value, e))
+                    }
                 }
             }
             KEYSYM_BACKSPACE => Ok(Backspace),

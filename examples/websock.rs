@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use clap::Parser;
 use futures_util::{Sink, Stream};
-use slog::{info, Drain};
+use slog::{debug, info, Drain};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use warp::filters::ws::{Message, WebSocket};
 use warp::{self, Filter};
@@ -127,6 +127,38 @@ struct App {
     log: slog::Logger,
 }
 
+async fn run_server(
+    server: rfb::Server,
+    mut sock: WsWrap,
+    be: ExampleBackend,
+    log: slog::Logger,
+) {
+    loop {
+        let msg = match server.read_msg(&mut sock).await {
+            Err(e) => {
+                info!(log, "Error reading client msg: {:?}", e);
+                return;
+            }
+            Ok(msg) => msg,
+        };
+
+        use rfb::rfb::ClientMessage;
+
+        match msg {
+            ClientMessage::FramebufferUpdateRequest(_req) => {
+                let fbu = be.generate(WIDTH, HEIGHT).await;
+                if let Err(e) = server.send_fbu(&mut sock, fbu, &log).await {
+                    info!(log, "Error sending FrambufferUpdate: {:?}", e);
+                    return;
+                }
+            }
+            _ => {
+                debug!(log, "RX: Client msg {:?}", msg);
+            }
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let log = slog::Logger::root(
@@ -200,11 +232,7 @@ async fn main() -> Result<()> {
                     .await
                     .unwrap();
 
-                server
-                    .process(&mut wrapped, &child_log, || {
-                        be_clone.generate(WIDTH, HEIGHT)
-                    })
-                    .await
+                run_server(server, wrapped, be_clone, child_log).await;
             })
         });
 

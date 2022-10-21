@@ -6,14 +6,9 @@
 
 use anyhow::{bail, Result};
 use slog::{debug, error, info, Logger};
-use std::future::Future;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::Mutex;
 
-use crate::rfb::ClientMessage::{
-    ClientCutText, FramebufferUpdateRequest, KeyEvent, PointerEvent,
-    SetEncodings, SetPixelFormat,
-};
 use crate::rfb::{
     ClientInit, ClientMessage, FramebufferUpdate, PixelFormat, ProtoVersion,
     SecurityResult, SecurityType, SecurityTypes, ServerInit,
@@ -151,94 +146,61 @@ impl Server {
         Ok(())
     }
 
-    pub async fn process<F, R>(
+    pub async fn send_fbu(
         &self,
-        s: &mut (impl AsyncRead + AsyncWrite + Unpin),
+        s: &mut (impl AsyncWrite + Unpin),
+        mut fbu: FramebufferUpdate,
         log: &Logger,
-        updatef: F,
-    ) where
-        F: Fn() -> R,
-        R: Future<Output = FramebufferUpdate>,
-    {
-        loop {
-            let req = ClientMessage::read_from(s).await;
+    ) -> Result<()> {
+        let state = self.state.lock().await;
 
-            match req {
-                Ok(client_msg) => match client_msg {
-                    SetPixelFormat(pf) => {
-                        debug!(log, "Rx: SetPixelFormat={:#?}", pf);
-
-                        // TODO: invalid pixel formats?
-                        let mut state = self.state.lock().await;
-                        state.output_format = pf;
-                        drop(state);
-                    }
-                    SetEncodings(e) => {
-                        debug!(log, "Rx: SetEncodings={:?}", e);
-                    }
-                    FramebufferUpdateRequest(f) => {
-                        debug!(log, "Rx: FramebufferUpdateRequest={:?}", f);
-
-                        //let mut fbu = self.server.get_framebuffer_update().await;
-                        let mut fbu = updatef().await;
-                        let state = self.state.lock().await;
-
-                        // We only need to change pixel formats if the client
-                        // requested a different one than what's specified in
-                        // the input.
-                        //
-                        // For now, we only support transformations between
-                        // 4-byte RGB formats, so if the requested format isn't
-                        // one of those, we'll just leave the pixels as is.
-                        if state.input_format != state.output_format
-                            && state.input_format.is_rgb_888()
-                            && state.output_format.is_rgb_888()
-                        {
-                            debug!(
-                                log,
-                                "transforming: input={:#?}, output={:#?}",
-                                state.input_format,
-                                state.output_format
-                            );
-                            fbu = fbu.transform(
-                                &state.input_format,
-                                &state.output_format,
-                            );
-                        } else if !(state.input_format.is_rgb_888()
-                            && state.output_format.is_rgb_888())
-                        {
-                            debug!(
-                                log,
-                                concat!(
-                                    "cannot transform between pixel formats (not rgb888):",
-                                    " input.is_rgb_888()={}, output.is_rgb_888()={}"
-                                ),
-                                state.input_format.is_rgb_888(),
-                                state.output_format.is_rgb_888()
-                            );
-                        }
-
-                        if let Err(e) = fbu.write_to(s).await {
-                            error!(log, "could not write FramebufferUpdateRequest: {:?}", e);
-                            return;
-                        }
-                        debug!(log, "Tx: FramebufferUpdate",);
-                    }
-                    KeyEvent(ke) => {
-                        debug!(log, "Rx: KeyEvent={:?}", ke);
-                    }
-                    PointerEvent(pe) => {
-                        debug!(log, "Rx: PointerEvent={:?}", pe);
-                    }
-                    ClientCutText(t) => {
-                        debug!(log, "Rx: ClientCutText={:?}", t);
-                    }
-                },
-                Err(e) => {
-                    error!(log, "error reading client message: {}", e);
-                    return;
-                }
-            }
+        // We only need to change pixel formats if the client requested a
+        // different one than what's specified in the input.
+        //
+        // For now, we only support transformations between 4-byte RGB formats,
+        // so if the requested format isn't one of those, we'll just leave the
+        // pixels as is.
+        if state.input_format != state.output_format
+            && state.input_format.is_rgb_888()
+            && state.output_format.is_rgb_888()
+        {
+            debug!(
+                log,
+                "transforming: input={:#?}, output={:#?}",
+                state.input_format,
+                state.output_format
+            );
+            fbu = fbu.transform(&state.input_format, &state.output_format);
+        } else if !(state.input_format.is_rgb_888()
+            && state.output_format.is_rgb_888())
+        {
+            debug!(
+                log,
+                concat!(
+                    "cannot transform between pixel formats (not rgb888):",
+                    " input.is_rgb_888()={}, output.is_rgb_888()={}"
+                ),
+                state.input_format.is_rgb_888(),
+                state.output_format.is_rgb_888()
+            );
         }
+
+        fbu.write_to(s).await
+    }
+
+    pub async fn read_msg(
+        &self,
+        s: &mut (impl AsyncRead + Unpin),
+    ) -> Result<ClientMessage> {
+        let msg = ClientMessage::read_from(s).await?;
+
+        // Keep track of the output format
+        if let ClientMessage::SetPixelFormat(pf) = &msg {
+            // TODO: invalid pixel formats?
+            let mut state = self.state.lock().await;
+            state.output_format = pf.clone();
+            drop(state);
+        }
+        Ok(msg)
     }
 }

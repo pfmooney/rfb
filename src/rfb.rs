@@ -506,6 +506,7 @@ impl ColorSpecification {
 }
 
 // Section 7.5
+#[derive(Debug)]
 pub enum ClientMessage {
     SetPixelFormat(PixelFormat),
     SetEncodings(Vec<EncodingType>),

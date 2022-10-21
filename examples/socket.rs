@@ -12,10 +12,8 @@ use clap::Parser;
 use slog::{info, Drain};
 use tokio::net::TcpListener;
 
-use rfb::encodings::RawEncoding;
 use rfb::rfb::{
-    ColorFormat, FramebufferUpdate, KeyEvent, PixelFormat, ProtoVersion,
-    SecurityType, SecurityTypes,
+    ColorFormat, PixelFormat, ProtoVersion, SecurityType, SecurityTypes,
 };
 use rfb::{self, pixel_formats::rgb_888};
 
@@ -135,11 +133,40 @@ async fn main() -> Result<()> {
         let be_clone = backend.clone();
         let log_child = log.new(slog::o!("sock" => addr));
         tokio::spawn(async move {
-            server
-                .process(&mut sock, &log_child, || {
-                    be_clone.generate(WIDTH, HEIGHT)
-                })
-                .await;
+            loop {
+                let msg = match server.read_msg(&mut sock).await {
+                    Err(e) => {
+                        slog::info!(
+                            log_child,
+                            "Error reading client msg: {:?}",
+                            e
+                        );
+                        return;
+                    }
+                    Ok(msg) => msg,
+                };
+
+                use rfb::rfb::ClientMessage;
+
+                match msg {
+                    ClientMessage::FramebufferUpdateRequest(_req) => {
+                        let fbu = be_clone.generate(WIDTH, HEIGHT).await;
+                        if let Err(e) =
+                            server.send_fbu(&mut sock, fbu, &log_child).await
+                        {
+                            slog::info!(
+                                log_child,
+                                "Error sending FrambufferUpdate: {:?}",
+                                e
+                            );
+                            return;
+                        }
+                    }
+                    _ => {
+                        slog::debug!(log_child, "RX: Client msg {:?}", msg);
+                    }
+                }
+            }
         });
     }
 }

@@ -25,8 +25,8 @@
 //! little-endian. This is the pixel format little-endian xBGR.
 //!
 //! So to get the value of each color, we would do:
-//! - red = (0x01020304 >> 0) & 255 = 0x04
-//! - blue = (0x01020304 >> 8) & 255 = 0x03
+//! - red   = (0x01020304 >> 0)  & 255 = 0x04
+//! - blue  = (0x01020304 >> 8)  & 255 = 0x03
 //! - green = (0x01020304 >> 16) & 255 = 0x02
 //!
 //! This is relatively straightforward when considering a single pixel format.
@@ -45,18 +45,21 @@
 //! so the least-significant byte (0x04) is first.
 //!
 //! So to get the value of each color, we would index into the pixel based on
-//! the shift. A shift of
-//! 0 indicates the color is at the least significant byte (the first byte, byte
-//!   0 for little-endian pixels), a shift of 8 is the second least significant
-//!   byte (1), and so on: - red = pixel\[0\] & 255 = 0x04 - green = pixel\[1\]
-//!   & 255 = 0x03 - blue = pixel\[2\] & 255 = 0x02
+//! the shift. A shift of 0 indicates the color is at the least significant byte
+//! (the first byte, byte 0 for little-endian pixels), a shift of 8 is the
+//! second least significant byte (1), and so on:
+//!  - red   = pixel\[0\] & 0xff = 0x04
+//!  - green = pixel\[1\] & 0xff = 0x03
+//!  - blue  = pixel\[2\] & 0xff = 0x02
 //!
 //! Since the RFB server is considering pixels that might be from little-endian
 //! or big-endian hosts though, consider if the same byte vector came from an
 //! RGBx big endian pixel. In that case, the least significant byte is byte 3
 //! and the most significant byte is byte 0. So the color values for this vector
-//! would be: - red = pixel\[3\] & 255 = 0x01 - green = pixel\[2\] & 255 = 0x02
-//! - blue = pixel\[1\] & 255 = 0x03
+//! would be:
+//! - red   = pixel\[3\] & 0xff = 0x01
+//! - green = pixel\[2\] & 0xff = 0x02
+//! - blue  = pixel\[1\] & 0xff = 0x03
 //!
 
 ///  Utility functions and constants related to fourcc codes.

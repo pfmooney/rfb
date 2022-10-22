@@ -4,13 +4,39 @@
 //
 // Copyright 2022 Oxide Computer Company
 
-use anyhow::{anyhow, Result};
 use bitflags::bitflags;
+use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::encodings::{Encoding, EncodingType};
 use crate::keysym::KeySym;
 use crate::pixel_formats::rgb_888;
+
+#[derive(Error, Debug)]
+pub enum ProtoError {
+    #[error("invalid protcol version")]
+    InvalidProtoVersion,
+
+    #[error("invalid security type: {0}")]
+    InvalidSecurityType(u8),
+
+    #[error("unknown client message type: {0}")]
+    UnknownMessageType(u8),
+
+    #[error("unknown keysym: {0}")]
+    UnknownKeysym(u32),
+
+    #[error("error parsing utf-8")]
+    Utf8Failure,
+
+    #[error("IO error {source}")]
+    Io {
+        #[from]
+        source: std::io::Error,
+    },
+}
+
+pub type Result<T> = std::result::Result<T, ProtoError>;
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub enum ProtoVersion {
@@ -30,7 +56,7 @@ impl ProtoVersion {
             b"RFB 003.003\n" => Ok(ProtoVersion::Rfb33),
             b"RFB 003.007\n" => Ok(ProtoVersion::Rfb37),
             b"RFB 003.008\n" => Ok(ProtoVersion::Rfb38),
-            _ => Err(anyhow!("invalid protocol version")),
+            _ => Err(ProtoError::InvalidProtoVersion),
         }
     }
 
@@ -81,7 +107,7 @@ impl SecurityType {
         match t {
             1 => Ok(SecurityType::None),
             2 => Ok(SecurityType::VncAuthentication),
-            v => Err(anyhow!(format!("invalid security type={}", v))),
+            v => Err(ProtoError::InvalidSecurityType(v)),
         }
     }
     pub async fn write_to(
@@ -173,7 +199,7 @@ impl ServerInit {
     }
 }
 
-pub enum _ServerMessage {
+pub enum ServerMessage {
     FramebufferUpdate(FramebufferUpdate),
     SetColorMapEntries(SetColorMapEntries),
     Bell,
@@ -201,6 +227,24 @@ impl FramebufferUpdate {
         }
 
         FramebufferUpdate { rectangles }
+    }
+
+    pub fn try_transform(
+        self,
+        input_pf: &PixelFormat,
+        output_pf: &PixelFormat,
+    ) -> std::result::Result<Self, Self> {
+        if input_pf == output_pf {
+            Ok(self)
+        } else if input_pf != output_pf
+            && input_pf.is_rgb_888()
+            && output_pf.is_rgb_888()
+        {
+            Ok(self.transform(input_pf, output_pf))
+        } else {
+            // Currently cannot transform between pixel formats unless they are both rgb888
+            Err(self)
+        }
     }
 }
 
@@ -539,9 +583,8 @@ impl ClientMessage {
 
                 let mut encodings = Vec::new();
                 for _ in 0..num_encodings {
-                    let e: EncodingType =
-                        EncodingType::try_from(stream.read_i32().await?)?;
-                    encodings.push(e);
+                    encodings
+                        .push(EncodingType::from(stream.read_i32().await?));
                 }
 
                 Ok(ClientMessage::SetEncodings(encodings))
@@ -574,11 +617,14 @@ impl ClientMessage {
                 stream.read_u16().await?;
 
                 let keysym_raw = stream.read_u32().await?;
-                let keysym = KeySym::try_from(keysym_raw)?;
+                let keysym = KeySym::try_from(keysym_raw)
+                    .map_err(|_| ProtoError::UnknownKeysym(keysym_raw))?;
 
-                let key_event = KeyEvent { is_pressed, keysym, keysym_raw };
-
-                Ok(ClientMessage::KeyEvent(key_event))
+                Ok(ClientMessage::KeyEvent(KeyEvent {
+                    is_pressed,
+                    keysym,
+                    keysym_raw,
+                }))
             }
             5 => {
                 // PointerEvent
@@ -592,20 +638,20 @@ impl ClientMessage {
                 let mut padding = [0u8; 3];
                 stream.read_exact(&mut padding).await?;
 
+                // TODO: limit size to prevent DoS
                 let len = stream.read_u32().await?;
-                let mut buf: Vec<u8> = Vec::with_capacity(len as usize);
+                let mut buf = vec![0u8; len as usize];
+
                 stream.read_exact(&mut buf).await?;
 
                 // TODO: The encoding RFB uses is ISO 8859-1 (Latin-1), which is
                 // a subset of utf-8. Determine if this is the right approach.
-                let text = String::from_utf8(buf)?;
+                let text = String::from_utf8(buf)
+                    .map_err(|_| ProtoError::Utf8Failure)?;
 
                 Ok(ClientMessage::ClientCutText(text))
             }
-            unknown => Err(anyhow!(format!(
-                "unknown client message type: {}",
-                unknown
-            ))),
+            unk => Err(ProtoError::UnknownMessageType(unk)),
         };
 
         res

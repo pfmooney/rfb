@@ -114,46 +114,73 @@ async fn main() -> Result<()> {
         let (mut sock, addr) = listener.accept().await.unwrap();
 
         info!(log, "New connection from {:?}", addr);
+        let log_child = log.new(slog::o!("sock" => addr));
 
-        let server = rfb::Server::new(WIDTH as u16, HEIGHT as u16, pf.clone());
-        server
-            .initialize(
-                &mut sock,
-                &log,
-                ProtoVersion::Rfb38,
-                SecurityTypes(vec![
+        let init_res = rfb::server::initialize(
+            &mut sock,
+            rfb::server::InitParams {
+                version: ProtoVersion::Rfb38,
+
+                sec_types: SecurityTypes(vec![
                     SecurityType::None,
                     SecurityType::VncAuthentication,
                 ]),
-                "rfb-example-server".to_string(),
-            )
-            .await
-            .unwrap();
+
+                name: "rfb-example-server".to_string(),
+
+                width: WIDTH as u16,
+                height: HEIGHT as u16,
+                format: pf.clone(),
+            },
+        )
+        .await;
+
+        if let Err(e) = init_res {
+            slog::info!(log_child, "Error during client init {:?}", e);
+            continue;
+        }
 
         let be_clone = backend.clone();
-        let log_child = log.new(slog::o!("sock" => addr));
+        let input_pf = pf.clone();
         tokio::spawn(async move {
+            let mut output_pf = input_pf.clone();
             loop {
-                let msg = match server.read_msg(&mut sock).await {
-                    Err(e) => {
-                        slog::info!(
-                            log_child,
-                            "Error reading client msg: {:?}",
-                            e
-                        );
-                        return;
-                    }
-                    Ok(msg) => msg,
-                };
+                let msg =
+                    match rfb::rfb::ClientMessage::read_from(&mut sock).await {
+                        Err(e) => {
+                            slog::info!(
+                                log_child,
+                                "Error reading client msg: {:?}",
+                                e
+                            );
+                            return;
+                        }
+                        Ok(msg) => msg,
+                    };
 
                 use rfb::rfb::ClientMessage;
 
                 match msg {
+                    ClientMessage::SetPixelFormat(out_pf) => {
+                        output_pf = out_pf;
+                    }
                     ClientMessage::FramebufferUpdateRequest(_req) => {
                         let fbu = be_clone.generate(WIDTH, HEIGHT).await;
-                        if let Err(e) =
-                            server.send_fbu(&mut sock, fbu, &log_child).await
+
+                        let fbu = match fbu.try_transform(&input_pf, &output_pf)
                         {
+                            Err(_) => {
+                                slog::info!(
+                                    log_child,
+                                    "Cannot convert to output PF {:?}",
+                                    output_pf
+                                );
+                                return;
+                            }
+                            Ok(x) => x,
+                        };
+
+                        if let Err(e) = fbu.write_to(&mut sock).await {
                             slog::info!(
                                 log_child,
                                 "Error sending FrambufferUpdate: {:?}",

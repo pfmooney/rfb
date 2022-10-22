@@ -11,5 +11,3 @@ pub mod keysym;
 pub mod pixel_formats;
 pub mod rfb;
 pub mod server;
-
-pub use server::Server;

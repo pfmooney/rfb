@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use clap::Parser;
 use futures_util::{Sink, Stream};
-use slog::{debug, info, Drain};
+use slog::{info, Drain};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use warp::filters::ws::{Message, WebSocket};
 use warp::{self, Filter};
@@ -128,15 +128,40 @@ struct App {
 }
 
 async fn run_server(
-    server: rfb::Server,
     mut sock: WsWrap,
     be: ExampleBackend,
+    input_pf: PixelFormat,
     log: slog::Logger,
 ) {
+    let init_res = rfb::server::initialize(
+        &mut sock,
+        rfb::server::InitParams {
+            version: ProtoVersion::Rfb38,
+
+            sec_types: SecurityTypes(vec![
+                SecurityType::None,
+                SecurityType::VncAuthentication,
+            ]),
+
+            name: "rfb-ws-example".to_string(),
+
+            width: WIDTH as u16,
+            height: HEIGHT as u16,
+            format: input_pf.clone(),
+        },
+    )
+    .await;
+
+    if let Err(e) = init_res {
+        slog::info!(log, "Error during client init {:?}", e);
+        return;
+    }
+
+    let mut output_pf = input_pf.clone();
     loop {
-        let msg = match server.read_msg(&mut sock).await {
+        let msg = match rfb::rfb::ClientMessage::read_from(&mut sock).await {
             Err(e) => {
-                info!(log, "Error reading client msg: {:?}", e);
+                slog::info!(log, "Error reading client msg: {:?}", e);
                 return;
             }
             Ok(msg) => msg,
@@ -145,15 +170,31 @@ async fn run_server(
         use rfb::rfb::ClientMessage;
 
         match msg {
+            ClientMessage::SetPixelFormat(out_pf) => {
+                output_pf = out_pf;
+            }
             ClientMessage::FramebufferUpdateRequest(_req) => {
                 let fbu = be.generate(WIDTH, HEIGHT).await;
-                if let Err(e) = server.send_fbu(&mut sock, fbu, &log).await {
-                    info!(log, "Error sending FrambufferUpdate: {:?}", e);
+
+                let fbu = match fbu.try_transform(&input_pf, &output_pf) {
+                    Err(_) => {
+                        slog::info!(
+                            log,
+                            "Cannot convert to output PF {:?}",
+                            output_pf
+                        );
+                        return;
+                    }
+                    Ok(x) => x,
+                };
+
+                if let Err(e) = fbu.write_to(&mut sock).await {
+                    slog::info!(log, "Error sending FrambufferUpdate: {:?}", e);
                     return;
                 }
             }
             _ => {
-                debug!(log, "RX: Client msg {:?}", msg);
+                slog::debug!(log, "RX: Client msg {:?}", msg);
             }
         }
     }
@@ -211,28 +252,11 @@ async fn main() -> Result<()> {
 
             let child_log = app.log.new(slog::o!("sock" => addr));
             let be_clone = app.be.clone();
-            let pf_clone = app.pf.clone();
+            let input_pf = app.pf.clone();
 
             ws.on_upgrade(move |websocket| async move {
-                let mut wrapped = WsWrap::new(websocket);
-
-                let server =
-                    rfb::Server::new(WIDTH as u16, HEIGHT as u16, pf_clone);
-                server
-                    .initialize(
-                        &mut wrapped,
-                        &child_log,
-                        ProtoVersion::Rfb38,
-                        SecurityTypes(vec![
-                            SecurityType::None,
-                            SecurityType::VncAuthentication,
-                        ]),
-                        "rfb-example-server".to_string(),
-                    )
-                    .await
-                    .unwrap();
-
-                run_server(server, wrapped, be_clone, child_log).await;
+                let wrapped = WsWrap::new(websocket);
+                run_server(wrapped, be_clone, input_pf, child_log).await;
             })
         });
 

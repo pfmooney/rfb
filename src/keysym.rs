@@ -4,7 +4,6 @@
 //
 // Copyright 2022 Oxide Computer Company
 
-use anyhow::anyhow;
 pub use ascii::AsciiChar;
 use ascii::ToAsciiChar;
 use KeySym::*;
@@ -147,18 +146,13 @@ pub enum KeySym {
 }
 
 impl TryFrom<u32> for KeySym {
-    type Error = anyhow::Error;
+    type Error = ();
 
-    fn try_from(value: u32) -> Result<Self, Self::Error> {
+    fn try_from(value: u32) -> Result<Self, ()> {
         match value {
             v if v <= ASCII_MAX => {
-                let ac_res = v.to_ascii_char();
-                match ac_res {
-                    Ok(ac) => Ok(Ascii(ac)),
-                    Err(e) => {
-                        Err(anyhow!("invalid keysym=0x{:x} ({:?})", value, e))
-                    }
-                }
+                // If within the above range, it will pass ASCII validity
+                Ok(KeySym::Ascii(v.to_ascii_char().unwrap()))
             }
             KEYSYM_BACKSPACE => Ok(Backspace),
             KEYSYM_TAB => Ok(Tab),
@@ -226,7 +220,7 @@ impl TryFrom<u32> for KeySym {
             KEYSYM_KP_PERIOD => Ok(KeypadPeriod),
             KEYSYM_KP_DELETE => Ok(KeypadDelete),
 
-            _ => Err(anyhow!("unknown keysym=0x{:x}", value)),
+            _ => Err(()),
         }
     }
 }

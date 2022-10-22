@@ -73,7 +73,6 @@
 pub mod fourcc {
     use super::rgb_888;
     use crate::rfb::{ColorFormat, ColorSpecification, PixelFormat};
-    use anyhow::{anyhow, Result};
 
     // XXX: it might make sense to turn fourcc values into a type (such as an
     // enum or collection of enums)
@@ -82,14 +81,14 @@ pub mod fourcc {
     pub const FOURCC_BX24: u32 = 0x34325842; // little-endian BGRx, 8:8:8:8
     pub const FOURCC_XB24: u32 = 0x34324258; // little-endian xBGR, 8:8:8:8
 
-    pub fn fourcc_to_pixel_format(fourcc: u32) -> Result<PixelFormat> {
+    pub fn fourcc_to_pixel_format(fourcc: u32) -> Option<PixelFormat> {
         // Placate clippy on the BITS_PER_COLOR multiplications
         #![allow(clippy::identity_op)]
         #![allow(clippy::erasing_op)]
 
         match fourcc {
             // little-endian xRGB
-            FOURCC_XR24 => Ok(PixelFormat {
+            FOURCC_XR24 => Some(PixelFormat {
                 bits_per_pixel: rgb_888::BITS_PER_PIXEL,
                 depth: rgb_888::DEPTH,
                 big_endian: false,
@@ -104,7 +103,7 @@ pub mod fourcc {
             }),
 
             // little-endian RGBx
-            FOURCC_RX24 => Ok(PixelFormat {
+            FOURCC_RX24 => Some(PixelFormat {
                 bits_per_pixel: rgb_888::BITS_PER_PIXEL,
                 depth: rgb_888::DEPTH,
                 big_endian: false,
@@ -119,7 +118,7 @@ pub mod fourcc {
             }),
 
             // little-endian BGRx
-            FOURCC_BX24 => Ok(PixelFormat {
+            FOURCC_BX24 => Some(PixelFormat {
                 bits_per_pixel: rgb_888::BITS_PER_PIXEL,
                 depth: rgb_888::DEPTH,
                 big_endian: false,
@@ -134,7 +133,7 @@ pub mod fourcc {
             }),
 
             // little-endian xBGR
-            FOURCC_XB24 => Ok(PixelFormat {
+            FOURCC_XB24 => Some(PixelFormat {
                 bits_per_pixel: rgb_888::BITS_PER_PIXEL,
                 depth: rgb_888::DEPTH,
                 big_endian: false,
@@ -148,7 +147,7 @@ pub mod fourcc {
                 }),
             }),
 
-            v => Err(anyhow!("unknown fourcc: {}", v)),
+            _ => None,
         }
     }
 }
